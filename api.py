@@ -22,22 +22,25 @@ class NetEase(object):
             "Connection": "keep-alive",
             "Content-Type": "application/x-www-form-urlencoded",
             "Host": "music.163.com",
-            "Referer": "http://music.163.com",
+            "Referer": "https://music.163.com",
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36",
         }
         username = str(username)
         self.username = username
         self.session = requests.Session()
-        if len(username) == 0:
-            return
+
         cookie_file = self.get_cookie_file(username)
-        if len(cookie_file) > 0:
+        if username and cookie_file:
             cookie_jar = LWPCookieJar(cookie_file)
             cookie_jar.load()
-            self.session.cookies = cookie_jar
-            self.session.cookies.load()
+        else:
+            cookie_jar = LWPCookieJar()
+        self.session.cookies = cookie_jar
+
 
     def get_cookie_file(self, filename):
+        if len(filename) == 0:
+            return None
         data_dir = os.path.join(os.path.expanduser("."), ".user_data")
         user_path = os.path.join(data_dir, filename)
         cookie_file = os.path.join(user_path, "cookie")
@@ -45,12 +48,12 @@ class NetEase(object):
             try:
                 os.makedirs(data_dir)
             except:
-                return ""
+                return None
         if not os.path.exists(user_path):
             try:
                 os.makedirs(user_path)
             except:
-                return ""
+                return None
 
         if not os.path.exists(cookie_file):
             try:
@@ -58,7 +61,7 @@ class NetEase(object):
                     f.write('#LWP-Cookies-2.0\nSet-Cookie3:')
                     f.close()
             except:
-                return ""
+                return None
 
         return cookie_file
 
@@ -122,15 +125,14 @@ class NetEase(object):
     def login(self, username, password, countrycode='86'):
         username = str(username)
         cookie_file = self.get_cookie_file(username)
-        if len(cookie_file) > 0:
+        if cookie_file:
             if self.username != username:
                 cookie_jar = LWPCookieJar(cookie_file)
                 cookie_jar.load()
                 self.session.cookies = cookie_jar
-                self.session.cookies.load()
-                # self.session.cookies.save()
                 self.username = username
-
+        if len(password) < 32:
+            password = md5(password.encode(encoding='UTF-8')).hexdigest()
         if username.isdigit():
             path = "/weapi/login/cellphone"
             if len(countrycode) == 0:
@@ -148,15 +150,15 @@ class NetEase(object):
                           rememberLogin="true", clientToken=client_token)
         data = self.request("POST", path, params)
 
-        if len(cookie_file) > 0:
+        if cookie_file:
             self.session.cookies.save()
         return data
 
     # 每日签到
-    def daily_task(self, is_mobile=True):
+    def daily_task(self, type=0):
         path = "/weapi/point/dailyTask"
-        params = dict(type=0 if is_mobile else 1)
-        return self.request("POST", path, params)
+        params = dict(type=type)
+        return self.request("POST", path, params, custom_cookies={'os': 'android'})
 
     # 用户歌单
     def user_playlist(self, uid, offset=0, limit=50, includeVideo=True):
@@ -318,6 +320,11 @@ class NetEase(object):
             params = dict(actionType=actionType, platform=platform)
             return self.request("POST", path, params)
 
+    # 获取任务
+    def mission_stage_get(self):
+        path = '/weapi/nmusician/workbench/mission/stage/list'
+        return self.request("POST", path)           
+
     # 领取云豆
     def reward_obtain(self, userMissionId, period):
         path = '/weapi/nmusician/workbench/mission/reward/obtain/new'
@@ -340,16 +347,16 @@ class NetEase(object):
 
     # 对歌曲进行评论
     def comments_add(self, song_id, content):
-        path = "/weapi/resource/comments/add"
+        path = "/weapi/v1/resource/comments/add"
         params = dict(threadId='R_SO_4_'+str(song_id), content=content)
-        return self.request("POST", path, params)
+        return self.request("POST", path, params, custom_cookies={'os': 'android'})
 
     # 回复歌曲评论
     def comments_reply(self, song_id, commentId, content):
         path = "/weapi/v1/resource/comments/reply"
         params = dict(commentId=commentId, threadId='R_SO_4_' +
                       str(song_id), content=content)
-        return self.request("POST", path, params)
+        return self.request("POST", path, params, custom_cookies={'os': 'android'})
 
     # 删除评论
     def comments_delete(self, song_id, commentId):
@@ -483,3 +490,33 @@ class NetEase(object):
             })
         }
         return self.request("POST", path, params)
+
+    # 获取歌曲评论
+    def song_comments(self, music_id, offset=0, total="false", limit=100):
+        path = "/weapi/v1/resource/comments/R_SO_4_{}/".format(music_id)
+        params = dict(rid=music_id, offset=offset, total=total, limit=limit)
+        return self.request("POST", path, params)
+
+    # 音乐人专辑列表
+    def musician_album(self):
+        path = "/weapi/nmusician/production/common/artist/album/item/list/get"
+        return self.request("POST", path)
+
+    def watch_college_lesson(self):
+        path = "/weapi/nmusician/workbench/creator/watch/college/lesson"
+        return self.request("POST", path)
+
+    def artist_homepage(self, artistId):
+        path = "/weapi/personal/home/page/artist"
+        params = dict(artistId=artistId)
+        return self.request("POST", path, params)
+
+    def circle_get(self, circleId):
+        path = "/weapi/circle/get"
+        params = dict(circleId=circleId)
+        return self.request("POST", path, params)        
+
+    def vipcenter_task_external(self, type):
+        path = "/weapi/vipnewcenter/app/level/task/external"
+        params = dict(type=type)
+        return self.request("POST", path, params)             
